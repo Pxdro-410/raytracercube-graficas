@@ -8,10 +8,8 @@ Raytracer desarrollado en Rust enfocado en el renderizado de un cubo tridimensio
 
 ## Demostracion
 
-<!-- Espacio reservado para el GIF animado de la aplicacion -->
-<div align="center">
-  <img src="demo.gif" alt="Demostracion del Raytracer" width="80%" />
-</div>
+<img width="990" height="744" alt="ray_tracer_cubo-PC" src="https://github.com/user-attachments/assets/fdedc7ef-955f-459d-9fe5-60f840e77ebd" />
+
 
 ---
 
