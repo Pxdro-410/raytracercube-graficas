@@ -41,11 +41,16 @@ impl RayIntersect for Plane {
             Vec3::new(0.0, -1.0, 0.0)
         };
 
+        let u = (point.x + self.half_size) / (2.0 * self.half_size);
+        let v = (point.z + self.half_size) / (2.0 * self.half_size);
+
         Some(Intersect {
             point,
             normal,
             distance: t,
-            material: self.material,
+            u,
+            v,
+            material: self.material.clone(),
         })
     }
 }
@@ -72,7 +77,6 @@ mod tests {
     fn test_plane_miss_outside_bounds() {
         let material = Material::new(Color::new(150, 150, 150));
         let plane = Plane::new(-1.0, 2.0, material);
-        // Rayo apunta a x = 5.0, fuera de bounds (-2.0..=2.0)
         let ray_origin = Vec3::new(5.0, 1.0, 0.0);
         let ray_direction = Vec3::new(0.0, -1.0, 0.0);
 

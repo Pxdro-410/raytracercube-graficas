@@ -4,7 +4,8 @@ use nalgebra_glm::Vec3;
 pub struct Cube {
     pub min: Vec3,
     pub max: Vec3,
-    pub material: Material,
+    pub top_bottom_material: Material,
+    pub sides_material: Material,
 }
 
 impl Cube {
@@ -13,7 +14,23 @@ impl Cube {
         Cube {
             min: center - Vec3::new(half, half, half),
             max: center + Vec3::new(half, half, half),
-            material,
+            top_bottom_material: material.clone(),
+            sides_material: material,
+        }
+    }
+
+    pub fn with_face_materials(
+        center: Vec3,
+        size: f32,
+        top_bottom_material: Material,
+        sides_material: Material,
+    ) -> Self {
+        let half = size / 2.0;
+        Cube {
+            min: center - Vec3::new(half, half, half),
+            max: center + Vec3::new(half, half, half),
+            top_bottom_material,
+            sides_material,
         }
     }
 }
@@ -31,7 +48,6 @@ impl RayIntersect for Cube {
             let max_val = self.max[i];
 
             if dir.abs() < 1e-6 {
-                // Ray is parallel to this slab
                 if origin < min_val || origin > max_val {
                     return None;
                 }
@@ -74,11 +90,38 @@ impl RayIntersect for Cube {
 
         let point = ray_origin + ray_direction * t;
 
+        let sx = self.max.x - self.min.x;
+        let sy = self.max.y - self.min.y;
+        let sz = self.max.z - self.min.z;
+
+        // Mapeo UV y asignación de material según la cara (lados vs arriba/abajo)
+        let (u, v, material) = if hit_normal.x > 0.5 {
+            // Cara derecha (+X)
+            ((self.max.z - point.z) / sz, (self.max.y - point.y) / sy, &self.sides_material)
+        } else if hit_normal.x < -0.5 {
+            // Cara izquierda (-X)
+            ((point.z - self.min.z) / sz, (self.max.y - point.y) / sy, &self.sides_material)
+        } else if hit_normal.y > 0.5 {
+            // Cara superior (+Y)
+            ((point.x - self.min.x) / sx, (point.z - self.min.z) / sz, &self.top_bottom_material)
+        } else if hit_normal.y < -0.5 {
+            // Cara inferior (-Y)
+            ((point.x - self.min.x) / sx, (self.max.z - point.z) / sz, &self.top_bottom_material)
+        } else if hit_normal.z > 0.5 {
+            // Cara frontal (+Z)
+            ((point.x - self.min.x) / sx, (self.max.y - point.y) / sy, &self.sides_material)
+        } else {
+            // Cara trasera (-Z)
+            ((self.max.x - point.x) / sx, (self.max.y - point.y) / sy, &self.sides_material)
+        };
+
         Some(Intersect {
             point,
             normal: hit_normal,
             distance: t,
-            material: self.material,
+            u: u.clamp(0.0, 1.0),
+            v: v.clamp(0.0, 1.0),
+            material: material.clone(),
         })
     }
 }
@@ -89,7 +132,7 @@ mod tests {
     use crate::color::Color;
 
     #[test]
-    fn test_cube_intersection_front() {
+    fn test_cube_intersection_front_and_uv() {
         let material = Material::new(Color::new(255, 0, 0));
         let cube = Cube::new(Vec3::new(0.0, 0.0, 0.0), 2.0, material);
 
@@ -100,6 +143,8 @@ mod tests {
         assert!((hit.distance - 4.0).abs() < 1e-4);
         assert_eq!(hit.normal, Vec3::new(0.0, 0.0, 1.0));
         assert_eq!(hit.point, Vec3::new(0.0, 0.0, 1.0));
+        assert!((hit.u - 0.5).abs() < 1e-4);
+        assert!((hit.v - 0.5).abs() < 1e-4);
     }
 
     #[test]
