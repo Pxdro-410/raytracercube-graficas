@@ -8,6 +8,7 @@ Raytracer interactivo desarrollado en Rust enfocado en el renderizado de un cubo
 
 ## Demostracion
 
+<img width="992" height="748" alt="ray_tracer_cubo_texturizado-PC" src="https://github.com/user-attachments/assets/54c8202f-c987-4b41-bf5c-317523540c57" />
 
 
 ---
