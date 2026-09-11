@@ -5,10 +5,13 @@ mod framebuffer;
 mod light;
 mod plane;
 mod ray_intersect;
+mod texture;
 
 use minifb::{Key, Window, WindowOptions};
 use nalgebra_glm::{dot, normalize, Vec3};
 use std::f32::consts::PI;
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::camera::Camera;
@@ -18,6 +21,7 @@ use crate::framebuffer::Framebuffer;
 use crate::light::Light;
 use crate::plane::Plane;
 use crate::ray_intersect::{Intersect, Material, RayIntersect};
+use crate::texture::Texture;
 
 const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
@@ -41,6 +45,7 @@ pub fn cast_shadow(
     objects.iter().any(|object| {
         object
             .ray_intersect(&shadow_ray_origin, light_direction)
+            .as_ref()
             .is_some_and(|blocker| blocker.distance < light_distance)
     })
 }
@@ -63,7 +68,9 @@ pub fn shade(
     let diffuse_intensity = dot(&intersect.normal, &light_direction).max(0.0);
     let total_intensity = (ambient_intensity + diffuse_intensity * light_intensity).min(1.0);
 
-    intersect.material.diffuse * total_intensity
+    // Muestrear el color difuso de la textura según las coordenadas UV
+    let diffuse_color = intersect.material.get_diffuse_color(intersect.u, intersect.v);
+    diffuse_color * total_intensity
 }
 
 pub fn cast_ray(
@@ -76,7 +83,10 @@ pub fn cast_ray(
 
     for object in objects {
         if let Some(intersect) = object.ray_intersect(ray_origin, ray_direction) {
-            if closest.is_none_or(|current| intersect.distance < current.distance) {
+            if closest
+                .as_ref()
+                .is_none_or(|current| intersect.distance < current.distance)
+            {
                 closest = Some(intersect);
             }
         }
@@ -120,39 +130,82 @@ pub fn render(
     }
 }
 
+fn create_textured_cube() -> Cube {
+    let center = Vec3::new(0.0, 0.0, 0.0);
+    let size = 1.5;
+
+    // Caso 1: Texturas separadas para arriba/abajo y laterales (sides.png y up-down.png)
+    let up_down_path = "assets/up-down.png";
+    let sides_path = "assets/sides.png";
+
+    if Path::new(up_down_path).exists() && Path::new(sides_path).exists() {
+        let top_bottom = Texture::from_file(up_down_path);
+        let sides = Texture::from_file(sides_path);
+
+        if let (Ok(tb_tex), Ok(s_tex)) = (top_bottom, sides) {
+            println!("[Textura] Cargadas texturas de caras compuestas:");
+            println!(" - Arriba / Abajo (+Y, -Y): {}", up_down_path);
+            println!(" - Laterales (+X, -X, +Z, -Z): {}", sides_path);
+            return Cube::with_face_materials(
+                center,
+                size,
+                Material::with_texture(Arc::new(tb_tex)),
+                Material::with_texture(Arc::new(s_tex)),
+            );
+        }
+    }
+
+    // Caso 2: Una sola imagen para las 6 caras
+    let possible_single = [
+        "assets/cube.png",
+        "assets/sides.png",
+        "assets/texture.png",
+        "assets/textura.png",
+    ];
+
+    for path in possible_single {
+        if Path::new(path).exists() {
+            if let Ok(tex) = Texture::from_file(path) {
+                println!("[Textura] Cargada textura unica para las 6 caras desde: {}", path);
+                return Cube::new(center, size, Material::with_texture(Arc::new(tex)));
+            }
+        }
+    }
+
+    // Caso 3: Textura procedural de prueba si no hay imágenes
+    println!("[Textura] Usando textura procedural de prueba en verde aqua.");
+    Cube::new(center, size, Material::with_texture(Arc::new(Texture::default_grid())))
+}
+
 fn main() {
     let frame_delay = Duration::from_millis(16);
 
     let mut framebuffer = Framebuffer::new(WIDTH, HEIGHT);
 
     let mut window = Window::new(
-        "Raytracer - Cubo Verde Aqua (Luz Difusa)",
+        "Raytracer - Cubo 3D Texturizado",
         WIDTH,
         HEIGHT,
         WindowOptions::default(),
     )
     .unwrap();
 
-    // Cubo con color verde aqua
-    let cube_material = Material::new(Color::new(50, 220, 195));
+    // Crear el cubo con sus texturas cargadas
+    let cube = create_textured_cube();
 
-    // Piso de color físico (gris neutro mate/piedra) y tamaño acotado (5.0 x 5.0)
+    // Piso acotado de color físico neutro mate
     let floor_material = Material::new(Color::new(145, 150, 160));
     let floor = Plane::new(-0.75, 2.5, floor_material);
 
     let objects: Vec<Box<dyn RayIntersect>> = vec![
-        Box::new(Cube::new(
-            Vec3::new(0.0, 0.0, 0.0),
-            1.5,
-            cube_material,
-        )),
+        Box::new(cube),
         Box::new(floor),
     ];
 
-    // Luz puntual para generar iluminación difusa y proyectar la sombra del cubo
+    // Luz puntual para generar iluminación difusa y proyectar sombras
     let light = Light::new(Vec3::new(4.0, 5.0, 6.0), Color::new(255, 255, 255), 0.85);
 
-    // Cámara apuntando exactamente al centro del cubo (0, 0, 0)
+    // Cámara orbital apuntando al centro del cubo (0, 0, 0)
     let mut camera = Camera::new(
         Vec3::new(2.2, 1.8, 3.2),
         Vec3::new(0.0, 0.0, 0.0),
@@ -161,7 +214,7 @@ fn main() {
 
     let mut camera_moved = true;
 
-    println!("=== Raytracer Cubo Verde Aqua ===");
+    println!("=== Raytracer Cubo 3D Texturizado ===");
     println!("Controles de camara orbital:");
     println!(" - Flechas o WASD: Rotar la camara orbitalmente alrededor del cubo");
     println!(" - Escape: Salir");
